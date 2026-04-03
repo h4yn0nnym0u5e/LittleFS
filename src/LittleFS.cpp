@@ -515,21 +515,49 @@ int LittleFS_SPIFlash::wait(uint32_t microseconds)
 int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_size_t size)
 {
 	if (!port) return LFS_ERR_IO;
-	const uint32_t addr = block * config.block_size + offset;
+	uint32_t addr = block * config.block_size + offset;
+	//Serial.printf("Read: block %d, offset %d, size %d",block, offset, size);
+	
 
 	//FRAM READ OPERATION
 	uint8_t cmdaddr[5];
 	//Serial.printf("  addrbits=%d\n", addrbits);
 	const uint8_t addrbits = ((const struct chipinfo *)hwinfo)->addrbits;
-	make_command_and_address(cmdaddr, 0x03, addr, addrbits);
-	memset(buf, 0, size);
-	port->beginTransaction(SPICONFIG);
-	digitalWrite(pin,LOW);                     //chip select
-	port->transfer(cmdaddr, 1 + (addrbits >> 3));
-	port->transfer(buf, size);
-	digitalWrite(pin,HIGH);  //release chip, signal end of transfer
-	port->endTransaction();
-	
+
+	char* end = (char*) buf+size;
+	lfs_size_t step = size;
+	const struct chipinfo* hwinf = (const struct chipinfo*) hwinfo;
+
+	// Looks like the PM004M can only read 64 bytes in one go, and
+	// we get a very occasional request for 128 bytes. Force
+	// multiple 64-byte reads in this case.
+	if (0x29 == hwinf->id[0] && 0x55 == hwinf->id[1])
+		step = hwinf->progsize;
+	for (char* p = (char*) buf;p < end; p += step)
+	{
+		make_command_and_address(cmdaddr, 0x03, addr, addrbits);
+		memset(p, 0, step);
+		port->beginTransaction(SPICONFIG);
+		digitalWrite(pin,LOW);                     //chip select
+		port->transfer(cmdaddr, 1 + (addrbits >> 3));
+		port->transfer(p, step);
+		digitalWrite(pin,HIGH);  //release chip, signal end of transfer
+		port->endTransaction();
+		//Serial.print(" *RRR* ");
+		addr += step;
+	}
+
+	/*
+	if (block > 100)
+	{
+		char buf2[size+1];
+		memcpy(buf2,buf,size);
+		buf2[size] = 0;
+		Serial.printf("; %s\n", buf2);
+	}
+	else
+		Serial.println();
+	*/
 	//printtbuf(buf, 20);
 	return 0;
 }
