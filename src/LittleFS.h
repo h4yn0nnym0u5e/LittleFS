@@ -526,11 +526,33 @@ inline void TLittleFS_SPIbus<SPIClass>::beginTransaction(FlexIOSPISettings s)
 
 class LittleFS_SPIFram : public LittleFS
 {
-	bool begin(uint8_t cspin, LittleFS_SPIbus& spiport);
+	bool begin(uint8_t cspin, LittleFS_SPIbus& spiport, bool autoFormat);
 public:
 	constexpr LittleFS_SPIFram() { }
-	bool begin(uint8_t cspin, SPIClass& _spiport = SPI) 
-		{ return begin(cspin, *(new TLittleFS_SPIbus<SPIClass>(_spiport))); }
+	bool begin(uint8_t cspin, SPIClass& _spiport = SPI, bool autoFormat = true) 
+		{ 
+			bool result = begin(cspin, 
+								*(new TLittleFS_SPIbus<SPIClass>(_spiport)),
+								autoFormat); 
+			if (!result)
+			{
+				delete port;
+				port = nullptr;
+			}
+			return result;
+		}
+	bool begin(uint8_t cspin, FlexIOSPI& _spiport, bool autoFormat = true) 
+		{ 
+			bool result = begin(cspin, 
+								*(new TLittleFS_SPIbus<FlexIOSPI>(_spiport)),
+								autoFormat); 
+			if (!result)
+			{
+				delete port;
+				port = nullptr;
+			}
+			return result;
+		}
 	const char * getMediaName();
 	const char * name() { return getMediaName(); }
 private:

@@ -172,12 +172,12 @@ const char * LittleFS_SPIFlash::getMediaName() {
 }
 
 FLASHMEM
-bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport)
+bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport, bool autoFormat)
 {
 	pin = cspin;
 	port = &spiport;
 
-	//Serial.printf("flash begin cs:%u\n", pin);
+	//Serial.printf("FRAM begin cs:%u\n", pin);
 	configured = false;
 	digitalWrite(pin, HIGH);
 	pinMode(pin, OUTPUT);
@@ -234,18 +234,23 @@ bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport)
 	config.name_max = LFS_NAME_MAX;
 	configured = true;
 
-	//Serial.println("attempting to mount existing media");
+	//Serial.println("attempting to mount existing medium");
 	if (lfs_mount(&lfs, &config) < 0) {
-		//Serial.println("couldn't mount media, attemping to format");
-		if (lfs_format(&lfs, &config) < 0) {
-			//Serial.println("format failed :(");
-			port = nullptr;
-			return false;
+		if (autoFormat)
+		{
+			//Serial.println("couldn't mount medium, attempting to format");
+			if (lfs_format(&lfs, &config) < 0) 
+			{
+				//Serial.println("format failed :(");
+				//port = nullptr;
+				return false;
+			}
 		}
-		//Serial.println("attempting to mount freshly formatted media");
+		//Serial.println("attempting to mount freshly formatted medium");
+		// If autoFormat is false this is just a second try - but we may get lucky!
 		if (lfs_mount(&lfs, &config) < 0) {
 			//Serial.println("mount after format failed :(");
-			port = nullptr;
+			//port = nullptr;
 			return false;
 		}
 	}
