@@ -23,7 +23,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 
-#define SPICONFIG   SPISettings(30000000, MSBFIRST, SPI_MODE0)
+#define SPICONFIG   SPISettings(20'000'000, MSBFIRST, SPI_MODE0)
 
 
 
@@ -70,7 +70,9 @@ PROGMEM static const struct chipinfo {
 {{0x60, 0x2A, 0xC2}, 24, 64, 128, 0, 262144, 250, 1200, "CY15B102Q"},  //Cypress 2Mb FRAM, CY15B102Q
 {{0x60, 0x2A, 0xC2}, 24, 64, 128, 0, 262144, 250, 1200, "CY15B102Q"},  //Cypress 2Mb FRAM, CY15B102Q
 {{0x04, 0x7F, 0x48}, 24, 64, 128, 0, 262144, 250, 1200, "MB85RS2MTAPNF"},  //Fujitsu 2Mb FRAM, MB85RS2MTAPNF
-{{0x04, 0x7F, 0x49}, 24, 64, 128, 0, 524288, 250, 1200, "MB85RS4MT"},  //Fujitsu 4Mb FRAM, MB85RS2MT
+{{0x04, 0x7F, 0x49}, 24, 64, 128, 0, 524288, 250, 1200, "MB85RS4MT"},   //Fujitsu 4Mb FRAM, MB85RS4MT
+{{0x04, 0x7F, 0x05}, 16, 64, 128, 0,  32768, 250, 1200, "MB85RS256B"},  //Fujitsu 256kb FRAM, MB85RS256B
+{{0x29, 0x55, 0x00}, 24, 64, 128, 0, 524288, 250, 1200, "PM004M"},      //STT 4Mb MRAM, PM004M (Shanghai Siproin Microelectronics http://www.siproin.com)
 
 };
 
@@ -189,21 +191,30 @@ bool LittleFS_SPIFram::begin(uint8_t cspin, SPIClass &spiport)
 	port->transfer(0x9f);  //0x9f - JEDEC register
 	for(uint8_t i = 0; i<9; i++) {
 		buf[i] = port->transfer(0);
+		//Serial.printf("%02X ", buf[i]);
 	}
+	//Serial.println();
 	//delayNanoseconds(50);
 	digitalWriteFast(pin, HIGH); // Chip deselect
 	port->endTransaction();
 
-	if (buf[0] == 0x7F) {
+	if (buf[3] == 0x29)  // PM004 has address in ID read!
+	{
+		buf[0] = buf[3];
+		buf[1] = buf[4];
+		buf[2] = buf[5];
+	}
+	else if (buf[0] == 0x7F) {
 		buf[0] = buf[6];
 		buf[1] = buf[7];
 		buf[2] = buf[8];
 	}
-	//Serial.printf("Flash ID: %02X %02X %02X\n", buf[0], buf[1], buf[2]);
+
+	//Serial.printf("FRAM ID: %02X %02X %02X\n", buf[0], buf[1], buf[2]);
 	const struct chipinfo *info = chip_lookup(buf );
 	if (!info) return false;
 	hwinfo = info;
-	//Serial.printf("Flash size is %.2f Mbyte\n", (float)info->chipsize / 1048576.0f);
+	//Serial.printf("FRAM size is %.2f Mbyte\n", (float)info->chipsize / 1048576.0f);
 
 	memset(&lfs, 0, sizeof(lfs));
 	memset(&config, 0, sizeof(config));
@@ -380,11 +391,18 @@ bool LittleFS::lowLevelFormat(char progressChar, Print* pr)
 static void make_command_and_address(uint8_t *buf, uint8_t cmd, uint32_t addr, uint8_t addrbits)
 {
 	buf[0] = cmd;
-	if (addrbits == 24) {
+	if (addrbits == 24) 
+	{
 		buf[1] = addr >> 16;
 		buf[2] = addr >> 8;
 		buf[3] = addr;
-	} else {
+	}
+	else if (addrbits == 16) 
+	{
+		buf[1] = addr >> 8;
+		buf[2] = addr;
+	} else 
+	{
 		buf[1] = addr >> 24;
 		buf[2] = addr >> 16;
 		buf[3] = addr >> 8;
