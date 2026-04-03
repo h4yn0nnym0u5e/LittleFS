@@ -23,7 +23,8 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 
-#define SPICONFIG   SPISettings(20'000'000, MSBFIRST, SPI_MODE0)
+#define SPICONFIG   	SPISettings(20'000'000, MSBFIRST, SPI_MODE0)
+#define FLEXSPICONFIG   FlexIOSPISettings(20'000'000, MSBFIRST, SPI_MODE0)
 
 
 
@@ -171,7 +172,7 @@ const char * LittleFS_SPIFlash::getMediaName() {
 }
 
 FLASHMEM
-bool LittleFS_SPIFram::begin(uint8_t cspin, SPIClass &spiport)
+bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport)
 {
 	pin = cspin;
 	port = &spiport;
@@ -185,7 +186,7 @@ bool LittleFS_SPIFram::begin(uint8_t cspin, SPIClass &spiport)
 	delay(100);
 	uint8_t buf[9];
 	
-	port->beginTransaction(SPICONFIG);
+	port->beginTransaction(FLEXSPICONFIG);
 	digitalWrite(pin, LOW);
 	delayNanoseconds(50);
 	port->transfer(0x9f);  //0x9f - JEDEC register
@@ -537,7 +538,7 @@ int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_s
 	{
 		make_command_and_address(cmdaddr, 0x03, addr, addrbits);
 		memset(p, 0, step);
-		port->beginTransaction(SPICONFIG);
+		port->beginTransaction(FLEXSPICONFIG);
 		digitalWrite(pin,LOW);                     //chip select
 		port->transfer(cmdaddr, 1 + (addrbits >> 3));
 		port->transfer(p, step);
@@ -573,7 +574,7 @@ int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf,
 	//Serial.printf("  addrbits=%d\n", addrbits);
 	make_command_and_address(cmdaddr, 0x02, addr, addrbits);
   
-	port->beginTransaction(SPICONFIG);
+	port->beginTransaction(FLEXSPICONFIG);
 	digitalWrite(pin,LOW);  //chip select
 	delayNanoseconds(50);
 	port->transfer(0x06);    //transmit write enable opcode
@@ -611,7 +612,7 @@ int LittleFS_SPIFram::erase(lfs_block_t block)
 	make_command_and_address(cmdaddr, 0x02, addr, addrbits);
 	
 	// F-RAM WRITE ENABLE COMMAND
-	port->beginTransaction(SPICONFIG);
+	port->beginTransaction(FLEXSPICONFIG);
 	digitalWrite(pin,LOW);  //chip select
 	port->transfer(0x06);    //transmit write enable opcode
 	digitalWrite(pin,HIGH); //release chip, signal end transfer

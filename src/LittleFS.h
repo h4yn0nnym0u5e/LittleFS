@@ -24,6 +24,7 @@
 #include <Arduino.h>
 #include <FS.h>
 #include <SPI.h>
+#include <FlexIOSPI.h>
 #include "littlefs/lfs.h"
 //#include <algorithm>
 
@@ -480,12 +481,56 @@ private:
 };
 
 
+/*
+ * Try to provide access to FRAM on either LPSPI
+ * or FlexIOSPI bus. We use the FlexIOSPISettings
+ * for the beginTransaction() method, as it keeps
+ * the settings accessible and can be converted to
+ * a SPISettings object, whereas the opposite is
+ * difficult, and also hardware-dependent.
+ */
+class LittleFS_SPIbus
+{
+public:
+	virtual ~LittleFS_SPIbus() {}
+	virtual void begin(void) = 0;
+	virtual void beginTransaction(FlexIOSPISettings s) = 0;
+	virtual void endTransaction(void) = 0;
+	virtual uint8_t transfer(uint8_t b) = 0;
+	virtual void transfer(void *buf, size_t count) = 0;
+	virtual void transfer(const void * buf, void * retbuf, uint32_t count) = 0;
+};
+
+template <class SPIhw>
+class TLittleFS_SPIbus : public LittleFS_SPIbus
+{
+public:	
+	TLittleFS_SPIbus(SPIhw& _hw) : hw{_hw} {}
+	SPIhw& hw; 
+	virtual void begin(void) { hw.begin(); }
+	virtual void beginTransaction(FlexIOSPISettings s) { hw.beginTransaction(s); }
+	virtual void endTransaction(void)   { hw.endTransaction(); }
+	virtual uint8_t transfer(uint8_t b) { return hw.transfer(b); }
+	virtual void transfer(void *buf, size_t count) { hw.transfer(buf, count); }
+	virtual void transfer(const void * buf, void * retbuf, uint32_t count) { hw.transfer(buf, retbuf, count);}
+};
+
+
+template<>
+inline void TLittleFS_SPIbus<SPIClass>::beginTransaction(FlexIOSPISettings s)
+{
+	SPISettings ss{s._clock,s._bitOrder,s._dataMode};
+	hw.beginTransaction(ss);
+}
+
 
 class LittleFS_SPIFram : public LittleFS
 {
+	bool begin(uint8_t cspin, LittleFS_SPIbus& spiport);
 public:
 	constexpr LittleFS_SPIFram() { }
-	bool begin(uint8_t cspin, SPIClass &spiport=SPI);
+	bool begin(uint8_t cspin, SPIClass& _spiport = SPI) 
+		{ return begin(cspin, *(new TLittleFS_SPIbus<SPIClass>(_spiport))); }
 	const char * getMediaName();
 	const char * name() { return getMediaName(); }
 private:
@@ -510,7 +555,7 @@ private:
 	static int static_sync(const struct lfs_config *c) {
 		return 0;
 	}
-	SPIClass *port = nullptr;
+	LittleFS_SPIbus *port = nullptr;
 	uint8_t pin = 0;
 	const void *hwinfo = nullptr;
 };
