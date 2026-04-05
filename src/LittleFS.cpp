@@ -72,8 +72,8 @@ PROGMEM static const struct chipinfo {
 {{0x60, 0x2A, 0xC2}, 24, 64, 128, 0, 262144, 250, 1200, "CY15B102Q"},  //Cypress 2Mb FRAM, CY15B102Q
 {{0x04, 0x7F, 0x48}, 24, 64, 128, 0, 262144, 250, 1200, "MB85RS2MTAPNF"},  //Fujitsu 2Mb FRAM, MB85RS2MTAPNF
 {{0x04, 0x7F, 0x49}, 24, 64, 128, 0, 524288, 250, 1200, "MB85RS4MT"},   //Fujitsu 4Mb FRAM, MB85RS4MT
-{{0x04, 0x7F, 0x05}, 16, 64, 128, 0,  32768, 250, 1200, "MB85RS256B"},  //Fujitsu 256kb FRAM, MB85RS256B
-{{0x29, 0x55, 0x00}, 24, 64, 128, 0, 524288, 250, 1200, "PM004M"},      //STT 4Mb MRAM, PM004M (Shanghai Siproin Microelectronics http://www.siproin.com)
+//{{0x04, 0x7F, 0x05}, 16, 64, 128, 0,  32768, 250, 1200, "MB85RS256B"},  //Fujitsu 256kb FRAM, MB85RS256B
+{{0x29, 0x55, 0x00}, 24+1, 64, 128, 0, 524288, 250, 1200, "PM004M"},      //STT 4Mb MRAM, PM004M (Shanghai Siproin Microelectronics http://www.siproin.com)
 
 };
 
@@ -295,17 +295,30 @@ bool LittleFS::quickFormat()
 static bool blockIsBlank(struct lfs_config *config, lfs_block_t block, void *readBuf, bool full=true );
 static bool blockIsBlank(struct lfs_config *config, lfs_block_t block, void *readBuf, bool full )
 {
-	if (!readBuf) return false;
+	Serial.printf("%d isBlank?: ", block);
+	if (!readBuf) 
+	{
+		Serial.println("no - readBuf");
+		return false;
+	}
 	for (lfs_off_t offset=0; offset < config->block_size; offset += config->read_size) {
 		memset(readBuf, 0, config->read_size);
 		config->read(config, block, offset, readBuf, config->read_size);
 		const uint8_t *buf = (uint8_t *)readBuf;
 		for (unsigned int i=0; i < config->read_size; i++) {
-			if (buf[i] != 0xFF) return false;
+			if (buf[i] != 0xFF) 
+			{
+				Serial.println("no - scan");
+				return false;
+			}
 		}
 		if ( !full )
+		{
+			Serial.println("yes");
 			return true; // first bytes read as 0xFF
+		}
 	}
+	Serial.println("yes");
 	return true; // all bytes read as 0xFF
 }
 
@@ -394,8 +407,13 @@ bool LittleFS::lowLevelFormat(char progressChar, Print* pr)
 	return quickFormat();
 }
 
-static void make_command_and_address(uint8_t *buf, uint8_t cmd, uint32_t addr, uint8_t addrbits)
+static void make_command_and_address(uint8_t *buf, uint8_t cmd, uint32_t addr, uint8_t addrbits_and_shift)
 {
+	// separate address bits into bit count and bit shift, for word-/long- etc addressed chips
+	uint8_t addrbits = addrbits_and_shift & 0xF8;
+	uint8_t shift = addrbits_and_shift & 0x07;
+	addr >>= shift;
+
 	buf[0] = cmd;
 	if (addrbits == 24) 
 	{
@@ -522,36 +540,21 @@ int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_s
 {
 	if (!port) return LFS_ERR_IO;
 	uint32_t addr = block * config.block_size + offset;
-	//Serial.printf("Read: block %d, offset %d, size %d",block, offset, size);
+	//Serial.printf("Read: block %d, offset %d, size %d\n",block, offset, size);
 	
 
 	//FRAM READ OPERATION
 	uint8_t cmdaddr[5];
 	//Serial.printf("  addrbits=%d\n", addrbits);
 	const uint8_t addrbits = ((const struct chipinfo *)hwinfo)->addrbits;
-
-	char* end = (char*) buf+size;
-	lfs_size_t step = size;
-	const struct chipinfo* hwinf = (const struct chipinfo*) hwinfo;
-
-	// Looks like the PM004M can only read 64 bytes in one go, and
-	// we get a very occasional request for 128 bytes. Force
-	// multiple 64-byte reads in this case.
-	if (0x29 == hwinf->id[0] && 0x55 == hwinf->id[1])
-		step = hwinf->progsize;
-	for (char* p = (char*) buf;p < end; p += step)
-	{
-		make_command_and_address(cmdaddr, 0x03, addr, addrbits);
-		memset(p, 0, step);
-		port->beginTransaction(FLEXSPICONFIG);
-		digitalWrite(pin,LOW);                     //chip select
-		port->transfer(cmdaddr, 1 + (addrbits >> 3));
-		port->transfer(p, step);
-		digitalWrite(pin,HIGH);  //release chip, signal end of transfer
-		port->endTransaction();
-		//Serial.print(" *RRR* ");
-		addr += step;
-	}
+	make_command_and_address(cmdaddr, 0x03, addr, addrbits);
+	memset(buf, 0, size);
+	port->beginTransaction(FLEXSPICONFIG);
+	digitalWrite(pin,LOW);                     //chip select
+	port->transfer(cmdaddr, 1 + (addrbits >> 3));
+	port->transfer(buf, size);
+	digitalWrite(pin,HIGH);  //release chip, signal end of transfer
+	port->endTransaction();
 
 	/*
 	if (block > 100)
@@ -570,6 +573,7 @@ int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_s
 
 int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf, lfs_size_t size)
 {
+	Serial.printf("Prog: block %d, offset %d, size %d\n",block, offset, size);
 	if (!port) return LFS_ERR_IO;
 	const uint32_t addr = block * config.block_size + offset;
 
@@ -577,13 +581,17 @@ int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf,
 	uint8_t cmdaddr[5];
 	const uint8_t addrbits = ((const struct chipinfo *)hwinfo)->addrbits;
 	//Serial.printf("  addrbits=%d\n", addrbits);
+
+	
 	make_command_and_address(cmdaddr, 0x02, addr, addrbits);
   
 	port->beginTransaction(FLEXSPICONFIG);
+
 	digitalWrite(pin,LOW);  //chip select
 	delayNanoseconds(50);
 	port->transfer(0x06);    //transmit write enable opcode
 	digitalWrite(pin,HIGH); //release chip, signal end transfer
+
 	delayNanoseconds(50);
 	// F-RAM WRITE OPERATION
 	digitalWrite(pin,LOW);                  //chip select
@@ -591,6 +599,7 @@ int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf,
 	// Data byte transmission
 	port->transfer(buf, nullptr, size);
 	digitalWrite(pin,HIGH);                  //release chip, signal end of transfer
+
 	port->endTransaction();
 	
 	return 0;
@@ -598,6 +607,7 @@ int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf,
 
 int LittleFS_SPIFram::erase(lfs_block_t block)
 {
+	Serial.printf("Erase: %d\n", block);
 	if (!port) return LFS_ERR_IO;
 	void *buffer = malloc(config.read_size);
 	if ( buffer != nullptr) {
@@ -608,9 +618,11 @@ int LittleFS_SPIFram::erase(lfs_block_t block)
 		free(buffer);
 	}
 	//Serial.printf("  flash er: block=%d\n", block);
-	uint8_t buf[256];
+	uint8_t buf[config.block_size];
 	//for(uint32_t i = 0; i < config.block_size; i++) buf[i] = 0xFF;
 	memset(buf, 0xFF, config.block_size);
+	prog(block,0,buf,config.block_size);
+	/*
 	uint8_t cmdaddr[5];
 	const uint32_t addr = block * config.block_size;
 	const uint8_t addrbits = ((const struct chipinfo *)hwinfo)->addrbits;
@@ -630,7 +642,7 @@ int LittleFS_SPIFram::erase(lfs_block_t block)
 	port->transfer(buf, nullptr, config.block_size);
 	digitalWrite(pin,HIGH);                  //release chip, signal end of transfer
 	port->endTransaction();
-	
+	*/
 	return 0;
 }
 
