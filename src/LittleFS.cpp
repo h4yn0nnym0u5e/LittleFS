@@ -23,8 +23,8 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 
-#define SPICONFIG   	SPISettings(20'000'000, MSBFIRST, SPI_MODE0)
-#define FLEXSPICONFIG   FlexIOSPISettings(20'000'000, MSBFIRST, SPI_MODE0)
+#define SPICONFIG   	SPISettings(30'000'000, MSBFIRST, SPI_MODE0)
+#define FLEXSPICONFIG   FlexIOSPISettings(30'000'000, MSBFIRST, SPI_MODE0)
 
 
 
@@ -295,30 +295,20 @@ bool LittleFS::quickFormat()
 static bool blockIsBlank(struct lfs_config *config, lfs_block_t block, void *readBuf, bool full=true );
 static bool blockIsBlank(struct lfs_config *config, lfs_block_t block, void *readBuf, bool full )
 {
-	Serial.printf("%d isBlank?: ", block);
 	if (!readBuf) 
-	{
-		Serial.println("no - readBuf");
 		return false;
-	}
+
 	for (lfs_off_t offset=0; offset < config->block_size; offset += config->read_size) {
 		memset(readBuf, 0, config->read_size);
 		config->read(config, block, offset, readBuf, config->read_size);
 		const uint8_t *buf = (uint8_t *)readBuf;
 		for (unsigned int i=0; i < config->read_size; i++) {
 			if (buf[i] != 0xFF) 
-			{
-				Serial.println("no - scan");
 				return false;
-			}
 		}
 		if ( !full )
-		{
-			Serial.println("yes");
 			return true; // first bytes read as 0xFF
-		}
 	}
-	Serial.println("yes");
 	return true; // all bytes read as 0xFF
 }
 
@@ -539,7 +529,7 @@ int LittleFS_SPIFlash::wait(uint32_t microseconds)
 int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_size_t size)
 {
 	if (!port) return LFS_ERR_IO;
-	uint32_t addr = block * config.block_size + offset;
+	const uint32_t addr = block * config.block_size + offset;
 	//Serial.printf("Read: block %d, offset %d, size %d\n",block, offset, size);
 	
 
@@ -556,24 +546,11 @@ int LittleFS_SPIFram::read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_s
 	digitalWrite(pin,HIGH);  //release chip, signal end of transfer
 	port->endTransaction();
 
-	/*
-	if (block > 100)
-	{
-		char buf2[size+1];
-		memcpy(buf2,buf,size);
-		buf2[size] = 0;
-		Serial.printf("; %s\n", buf2);
-	}
-	else
-		Serial.println();
-	*/
-	//printtbuf(buf, 20);
 	return 0;
 }
 
 int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf, lfs_size_t size)
 {
-	Serial.printf("Prog: block %d, offset %d, size %d\n",block, offset, size);
 	if (!port) return LFS_ERR_IO;
 	const uint32_t addr = block * config.block_size + offset;
 
@@ -607,7 +584,6 @@ int LittleFS_SPIFram::prog(lfs_block_t block, lfs_off_t offset, const void *buf,
 
 int LittleFS_SPIFram::erase(lfs_block_t block)
 {
-	Serial.printf("Erase: %d\n", block);
 	if (!port) return LFS_ERR_IO;
 	void *buffer = malloc(config.read_size);
 	if ( buffer != nullptr) {
@@ -622,27 +598,7 @@ int LittleFS_SPIFram::erase(lfs_block_t block)
 	//for(uint32_t i = 0; i < config.block_size; i++) buf[i] = 0xFF;
 	memset(buf, 0xFF, config.block_size);
 	prog(block,0,buf,config.block_size);
-	/*
-	uint8_t cmdaddr[5];
-	const uint32_t addr = block * config.block_size;
-	const uint8_t addrbits = ((const struct chipinfo *)hwinfo)->addrbits;
-	make_command_and_address(cmdaddr, 0x02, addr, addrbits);
-	
-	// F-RAM WRITE ENABLE COMMAND
-	port->beginTransaction(FLEXSPICONFIG);
-	digitalWrite(pin,LOW);  //chip select
-	port->transfer(0x06);    //transmit write enable opcode
-	digitalWrite(pin,HIGH); //release chip, signal end transfer
-	delayNanoseconds(50);
-	// F-RAM WRITE OPERATION
-	digitalWrite(pin,LOW);                   //chip select
-	port->transfer(cmdaddr, 1 + (addrbits >> 3));  
-  
-	// Data byte transmission
-	port->transfer(buf, nullptr, config.block_size);
-	digitalWrite(pin,HIGH);                  //release chip, signal end of transfer
-	port->endTransaction();
-	*/
+
 	return 0;
 }
 

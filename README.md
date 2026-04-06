@@ -34,7 +34,7 @@ Winbond  | W25N01G | 1Gb
 ... | W25M02 | 2Gb
 
 
-### FRAM
+### FRAM / MRAM
 
 ####
 MFG | PART # | Size
@@ -46,7 +46,9 @@ Cypress | CY15B108QN-40SXI | 8Mb
 ... | CY15B102Q-SXI | 2Mb
 ROHM | MR45V100A | 1Mb
 Fujitsu | MB85RS2MTAPNF | 2Mb
-Fujitsu | MB85RS4MT | 4Mb
+... | MB85RS4MT | 4Mb
+SST | PM004M | 4Mb
+
 
 ## USAGE
 
@@ -116,6 +118,15 @@ For SPI the ```begin``` statement requires the user to specify the Chip Select p
 ```myfs.begin(CSpin, SPIport);```
 
 By default the SPI port is SPI, use SPI1, SPI2 etc for other ports.
+
+### FRAM FlexIOSPI experimental support
+
+```c++
+FlexioPSI myFlexIOSPI{mosiPin, misoPin, sckPin};
+myfs.begin(CSpin, myFlexIOSPI);
+```
+This could in principle be extended to other SPI-connected parts.
+
 
 ## Examples
 
