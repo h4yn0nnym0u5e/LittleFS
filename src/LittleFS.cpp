@@ -186,6 +186,7 @@ bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport, bool autoF
 	delay(100);
 	uint8_t buf[9];
 	
+	/*
 	port->beginTransaction(FLEXSPICONFIG);
 	digitalWrite(pin, LOW);
 	delayNanoseconds(50);
@@ -198,6 +199,8 @@ bool LittleFS_SPIFram::begin(uint8_t cspin, LittleFS_SPIbus& spiport, bool autoF
 	//delayNanoseconds(50);
 	digitalWriteFast(pin, HIGH); // Chip deselect
 	port->endTransaction();
+	*/
+	getUniqueID(buf,9);
 
 	if (buf[3] == 0x29)  // PM004 has address in ID read!
 	{
@@ -263,6 +266,25 @@ FLASHMEM
 const char * LittleFS_SPIFram::getMediaName() {
 	if (!hwinfo) return nullptr;
 	return ((const struct chipinfo *)hwinfo)->pn;
+}
+
+FLASHMEM
+bool LittleFS_SPIFram::getUniqueID(uint8_t* buffer, size_t sz)
+{
+	port->beginTransaction(FLEXSPICONFIG);
+	digitalWrite(pin, LOW);
+	delayNanoseconds(50);
+	port->transfer(0x9f);  //0x9f - JEDEC register
+	for(size_t i = 0; i<sz; i++) {
+		buffer[i] = port->transfer(0);
+		//Serial.printf("%02X ", buf[i]);
+	}
+	//Serial.println();
+	//delayNanoseconds(50);
+	digitalWriteFast(pin, HIGH); // Chip deselect
+	port->endTransaction();
+
+	return true;
 }
 
 FLASHMEM

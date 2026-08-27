@@ -249,6 +249,7 @@ public:
 	virtual const char * getMediaName() {return (const char*)F("");}
 	virtual const char * name() { return getMediaName(); }
 	virtual bool mediaPresent() { return mounted; }
+	virtual bool getUniqueID(uint8_t* buffer, size_t sz) { *buffer = 0; return false; }
 
 	bool quickFormat();
 	bool lowLevelFormat(char progressChar=0, Print* pr=&Serial);
@@ -555,6 +556,7 @@ public:
 		}
 	const char * getMediaName();
 	const char * name() { return getMediaName(); }
+	bool getUniqueID(uint8_t* buffer, size_t sz);
 private:
 	int read(lfs_block_t block, lfs_off_t offset, void *buf, lfs_size_t size);
 	int prog(lfs_block_t block, lfs_off_t offset, const void *buf, lfs_size_t size);
