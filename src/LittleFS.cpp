@@ -24,7 +24,7 @@
 #include <LittleFS.h>
 
 #define SPICONFIG   	SPISettings(30'000'000, MSBFIRST, SPI_MODE0)
-#define FLEXSPICONFIG   FlexIOSPISettings(30'000'000, MSBFIRST, SPI_MODE0)
+#define FLEXSPICONFIG   FlexIOSPISettings(15'000'000, MSBFIRST, SPI_MODE0)
 
 
 
